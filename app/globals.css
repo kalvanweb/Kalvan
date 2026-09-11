@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Falls back to a condensed system stack out of the box. For the exact
+     brand type shown in the blueprint, install next/font (see README:
+     "Adding the brand typefaces") and these variables will pick it up. */
+  --font-display: 'Oswald', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #F3EEE5;
+  color: #1C1B19;
+}
+
+::selection {
+  background-color: #6B6B4D;
+  color: #F3EEE5;
+}
+
+.container-page {
+  @apply mx-auto w-full max-w-8xl px-5 sm:px-8 lg:px-12;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 bg-charcoal text-ivory px-7 py-3.5 text-sm tracking-wide transition-colors duration-200 hover:bg-olive-dark disabled:opacity-40 disabled:pointer-events-none;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 border border-charcoal/70 text-charcoal px-7 py-3.5 text-sm tracking-wide transition-colors duration-200 hover:border-charcoal hover:bg-charcoal hover:text-ivory;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-charcoal/80 underline underline-offset-4 decoration-charcoal/30 transition-colors hover:text-charcoal hover:decoration-charcoal;
+}
+
+.label-eyebrow {
+  @apply text-[11px] tracking-widest2 text-stone;
+}
+
+.focus-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-olive focus-visible:ring-offset-2 focus-visible:ring-offset-ivory;
+}
+
+.field {
+  @apply focus-ring w-full border border-charcoal/20 bg-transparent px-3 py-2.5 text-sm;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
