@@ -3,7 +3,11 @@ import Link from "next/link";
 import ProductCard from "@/components/ProductCard";
 import Newsletter from "@/components/Newsletter";
 import StarRating from "@/components/StarRating";
-import { products, categories } from "@/lib/products";
+import { supabase } from "@/lib/supabase";
+import { mapProduct, DbProduct } from "@/lib/mappers";
+import { categories } from "@/lib/products";
+
+export const revalidate = 60;
 
 const categoryImages: Record<string, string> = {
   Shirts: "https://images.unsplash.com/photo-1621072156002-e2fccdc0b176?w=800&q=80",
@@ -46,9 +50,11 @@ const reviews = [
   },
 ];
 
-export default function HomePage() {
-  const newArrivals = products.filter((p) => p.isNewArrival).slice(0, 4);
-  const bestSellers = products.filter((p) => p.isBestSeller).slice(0, 4);
+export default async function HomePage() {
+  const { data } = await supabase.from("products").select("*, product_variants(*)");
+  const allProducts = ((data ?? []) as DbProduct[]).map(mapProduct);
+  const newArrivals = allProducts.filter((p) => p.isNewArrival).slice(0, 4);
+  const bestSellers = allProducts.filter((p) => p.isBestSeller).slice(0, 4);
 
   return (
     <>

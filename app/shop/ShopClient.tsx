@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import ProductCard from "@/components/ProductCard";
-import { products, categories, colorOptions, sizeOptions } from "@/lib/products";
+import { categories, colorOptions, sizeOptions, fetchProducts, Product } from "@/lib/products";
 
 type SortKey = "featured" | "price-asc" | "price-desc" | "rating";
 
@@ -12,12 +12,34 @@ export default function ShopClient() {
   const router = useRouter();
   const initialCategory = searchParams.get("category") || "";
 
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [activeCategory, setActiveCategory] = useState(initialCategory);
   const [activeColors, setActiveColors] = useState<string[]>([]);
   const [activeSizes, setActiveSizes] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>("featured");
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchProducts()
+      .then((data) => {
+        if (!cancelled) setProducts(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError("Couldn't load products. Please try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function toggle(list: string[], value: string, setList: (v: string[]) => void) {
     setList(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
@@ -46,7 +68,7 @@ export default function ShopClient() {
         break;
     }
     return result;
-  }, [activeCategory, activeColors, activeSizes, sort, query]);
+  }, [products, activeCategory, activeColors, activeSizes, sort, query]);
 
   function setCategory(cat: string) {
     setActiveCategory(cat);
@@ -65,7 +87,7 @@ export default function ShopClient() {
             {activeCategory || "Shop All"}
           </h1>
         </div>
-        <p className="text-sm text-charcoal/50">{filtered.length} products</p>
+        <p className="text-sm text-charcoal/50">{loading ? "Loading…" : `${filtered.length} products`}</p>
       </div>
 
       <div className="mt-8 flex flex-col gap-8 lg:flex-row">
@@ -173,7 +195,17 @@ export default function ShopClient() {
             </select>
           </div>
 
-          {filtered.length === 0 ? (
+          {loadError ? (
+            <div className="border border-dashed border-rust/40 py-20 text-center">
+              <p className="text-sm text-rust">{loadError}</p>
+            </div>
+          ) : loading ? (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="aspect-[4/5] animate-pulse bg-stone-light/30" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="border border-dashed border-charcoal/20 py-20 text-center">
               <p className="text-sm text-charcoal/60">
                 No products match those filters. Try clearing a filter or search term.

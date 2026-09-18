@@ -1,29 +1,35 @@
-import { notFound } from "next/navigation";
 import { Metadata } from "next";
-import { getProductBySlug, getRelatedProducts, products } from "@/lib/products";
+import { supabase } from "@/lib/supabase";
 import ProductDetailClient from "./ProductDetailClient";
 
-export function generateStaticParams() {
-  return products.map((p) => ({ slug: p.slug }));
-}
+// Product data is now live in Supabase, so pages render dynamically
+// (no generateStaticParams) — this always reflects current stock/pricing.
+export const dynamic = "force-dynamic";
 
-export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
-  const product = getProductBySlug(params.slug);
+export async function generateMetadata({
+  params,
+}: {
+  params: { slug: string };
+}): Promise<Metadata> {
+  const { data: product } = await supabase
+    .from("products")
+    .select("name, description, images")
+    .eq("slug", params.slug)
+    .single();
+
   if (!product) return {};
+
   return {
     title: product.name,
     description: product.description,
     openGraph: {
       title: product.name,
       description: product.description,
-      images: [product.images[0]],
+      images: product.images?.[0] ? [product.images[0]] : undefined,
     },
   };
 }
 
 export default function ProductPage({ params }: { params: { slug: string } }) {
-  const product = getProductBySlug(params.slug);
-  if (!product) notFound();
-  const related = getRelatedProducts(product);
-  return <ProductDetailClient product={product} related={related} />;
+  return <ProductDetailClient slug={params.slug} />;
 }

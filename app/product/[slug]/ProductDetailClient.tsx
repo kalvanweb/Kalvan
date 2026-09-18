@@ -1,57 +1,110 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Product } from "@/lib/products";
+import { Product, fetchProductBySlug } from "@/lib/products";
 import { useCart } from "@/context/CartContext";
 import ProductCard from "@/components/ProductCard";
 import StarRating from "@/components/StarRating";
 
-export default function ProductDetailClient({
-  product,
-  related,
-}: {
-  product: Product;
-  related: Product[];
-}) {
+export default function ProductDetailClient({ slug }: { slug: string }) {
   const { addItem } = useCart();
   const router = useRouter();
+
+  const [product, setProduct] = useState<Product | null>(null);
+  const [related, setRelated] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
   const [activeImage, setActiveImage] = useState(0);
-  const [selectedColor, setSelectedColor] = useState(product.colors[0]);
+  const [selectedColor, setSelectedColor] = useState<string>("");
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchProductBySlug(slug).then((data) => {
+      if (cancelled) return;
+      if (!data) {
+        setNotFound(true);
+      } else {
+        setProduct(data.product);
+        setRelated(data.related);
+        setSelectedColor(data.product.colors[0]);
+      }
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
   const activeVariant = useMemo(
     () =>
-      product.variants.find(
+      product?.variants.find(
         (v) => v.color === selectedColor && v.size === selectedSize
       ),
-    [product.variants, selectedColor, selectedSize]
+    [product, selectedColor, selectedSize]
   );
 
-  const hasDiscount = product.mrp && product.mrp > product.price;
+  const hasDiscount = product?.mrp && product.mrp > product.price;
 
   function handleAddToCart(goToCheckout = false) {
+    if (!product) return;
     if (!selectedSize) {
       setError("Please select a size.");
       return;
     }
-    if (activeVariant && activeVariant.stock <= 0) {
+    if (!activeVariant) {
+      setError("That combination isn't available.");
+      return;
+    }
+    if (activeVariant.stock <= 0) {
       setError("This size is currently out of stock.");
       return;
     }
     setError(null);
-    addItem(product, selectedSize, selectedColor);
+    addItem(product, selectedSize, selectedColor, activeVariant.id);
     if (goToCheckout) {
       router.push("/cart");
     } else {
       setAdded(true);
       setTimeout(() => setAdded(false), 2000);
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="container-page py-14">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-16">
+          <div className="aspect-[4/5] animate-pulse bg-stone-light/30" />
+          <div className="space-y-4">
+            <div className="h-4 w-24 animate-pulse bg-stone-light/40" />
+            <div className="h-10 w-2/3 animate-pulse bg-stone-light/40" />
+            <div className="h-4 w-full animate-pulse bg-stone-light/30" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound || !product) {
+    return (
+      <div className="container-page flex flex-col items-center py-24 text-center">
+        <h1 className="font-display text-4xl tracking-wide">Product not found</h1>
+        <p className="mt-3 text-sm text-charcoal/60">
+          This product may have been removed or the link is incorrect.
+        </p>
+        <Link href="/shop" className="btn-primary mt-8">
+          Back to shop
+        </Link>
+      </div>
+    );
   }
 
   return (

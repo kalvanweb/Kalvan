@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
+import { supabase } from "@/lib/supabase";
 
 export default function CheckoutPage() {
-  const { items, subtotal, discount, clearCart } = useCart();
+  const { items, subtotal, discount, coupon, clearCart } = useCart();
   const router = useRouter();
 
   const [form, setForm] = useState({
@@ -21,6 +22,7 @@ export default function CheckoutPage() {
   const [payment, setPayment] = useState<"online" | "cod">("online");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [placing, setPlacing] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const shipping = subtotal >= 2999 || subtotal === 0 ? 0 : 149;
   const codFee = payment === "cod" ? 49 : 0;
@@ -39,20 +41,59 @@ export default function CheckoutPage() {
     return Object.keys(next).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (items.length === 0) return;
     if (!validate()) return;
 
     setPlacing(true);
-    // Order creation is atomic server-side in production: address validated,
-    // inventory reserved, payment verified (or COD flagged) before an order
-    // record is created. Simulated here for the storefront demo.
-    const orderId = `KLV${Date.now().toString().slice(-8)}`;
-    setTimeout(() => {
+    setSubmitError(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          items: items.map((i) => ({
+            productId: i.productId,
+            variantId: i.variantId,
+            quantity: i.quantity,
+          })),
+          address: {
+            fullName: form.fullName,
+            phone: form.phone,
+            line1: form.line1,
+            line2: form.line2 || undefined,
+            city: form.city,
+            state: form.state,
+            pincode: form.pincode,
+          },
+          paymentMethod: payment,
+          couponCode: coupon ?? undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setSubmitError(data.error || "Something went wrong placing your order.");
+        setPlacing(false);
+        return;
+      }
+
       clearCart();
-      router.push(`/order-confirmation?orderId=${orderId}&method=${payment}&total=${total}`);
-    }, 900);
+      router.push(
+        `/order-confirmation?orderId=${data.orderNumber}&method=${payment}&total=${data.total}`
+      );
+    } catch (err) {
+      setSubmitError("Couldn't reach the server. Check your connection and try again.");
+      setPlacing(false);
+    }
   }
 
   if (items.length === 0) {
@@ -209,6 +250,7 @@ export default function CheckoutPage() {
               <dd>₹{total.toLocaleString("en-IN")}</dd>
             </div>
           </dl>
+          {submitError && <p className="text-sm text-rust">{submitError}</p>}
           <button type="submit" disabled={placing} className="btn-primary w-full">
             {placing ? "Placing order…" : payment === "cod" ? "Place Order (COD)" : "Pay & Place Order"}
           </button>

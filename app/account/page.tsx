@@ -1,22 +1,85 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 
-const mockOrders = [
-  { id: "KLV20240931", date: "12 Aug 2026", status: "Delivered", total: 4298 },
-  { id: "KLV20240817", date: "02 Jul 2026", status: "In Transit", total: 2799 },
-];
+type Order = {
+  id: string;
+  order_number: string;
+  total: number;
+  order_status: string;
+  created_at: string;
+};
 
-const tabs = ["Profile", "Orders", "Addresses", "Wishlist"] as const;
+const tabs = ["Profile", "Orders", "Wishlist"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function AccountPage() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [activeTab, setActiveTab] = useState<Tab>("Profile");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  if (!loggedIn) {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setCheckingSession(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "Orders" || !session) return;
+    setOrdersLoading(true);
+    fetch("/api/orders", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => setOrders(data.orders ?? []))
+      .finally(() => setOrdersLoading(false));
+  }, [activeTab, session]);
+
+  async function handleAuthSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError(null);
+    setSubmitting(true);
+    try {
+      if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email: form.email,
+          password: form.password,
+          options: { data: { full_name: form.name } },
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: form.email,
+          password: form.password,
+        });
+        if (error) throw error;
+      }
+    } catch (err: any) {
+      setAuthError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (checkingSession) {
+    return <div className="container-page py-24 text-center text-sm text-charcoal/50">Loading…</div>;
+  }
+
+  if (!session) {
     return (
       <div className="container-page flex justify-center py-16 sm:py-24">
         <div className="w-full max-w-sm">
@@ -24,13 +87,7 @@ export default function AccountPage() {
           <h1 className="mt-2 text-center font-display text-4xl tracking-wide">
             {mode === "login" ? "Sign In" : "Create Account"}
           </h1>
-          <form
-            className="mt-8 space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setLoggedIn(true);
-            }}
-          >
+          <form className="mt-8 space-y-4" onSubmit={handleAuthSubmit}>
             {mode === "signup" && (
               <div>
                 <label className="text-xs text-charcoal/60">Full name</label>
@@ -63,22 +120,28 @@ export default function AccountPage() {
                 className="field mt-1"
               />
             </div>
-            <button type="submit" className="btn-primary w-full">
-              {mode === "login" ? "Sign In" : "Create Account"}
+            {authError && <p className="text-sm text-rust">{authError}</p>}
+            <button type="submit" disabled={submitting} className="btn-primary w-full">
+              {submitting ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
             </button>
           </form>
           <p className="mt-6 text-center text-sm text-charcoal/60">
             {mode === "login" ? "New to KALVAN?" : "Already have an account?"}{" "}
             <button
-              onClick={() => setMode(mode === "login" ? "signup" : "login")}
+              onClick={() => {
+                setMode(mode === "login" ? "signup" : "login");
+                setAuthError(null);
+              }}
               className="text-charcoal underline underline-offset-4"
             >
               {mode === "login" ? "Create an account" : "Sign in"}
             </button>
           </p>
-          <p className="mt-2 text-center text-xs text-charcoal/40">
-            Demo account — no real authentication is wired up yet.
-          </p>
+          {mode === "signup" && (
+            <p className="mt-2 text-center text-xs text-charcoal/40">
+              Depending on your Supabase project settings, you may need to confirm your email before signing in.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -88,7 +151,7 @@ export default function AccountPage() {
     <div className="container-page py-10 sm:py-14">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-4xl tracking-wide sm:text-5xl">My Account</h1>
-        <button onClick={() => setLoggedIn(false)} className="btn-ghost">
+        <button onClick={() => supabase.auth.signOut()} className="btn-ghost">
           Sign out
         </button>
       </div>
@@ -113,56 +176,40 @@ export default function AccountPage() {
         {activeTab === "Profile" && (
           <div className="max-w-md space-y-4">
             <div>
-              <label className="text-xs text-charcoal/60">Full name</label>
-              <input defaultValue="Aditya Verma" className="field mt-1" />
-            </div>
-            <div>
               <label className="text-xs text-charcoal/60">Email</label>
-              <input defaultValue="aditya.verma@example.com" className="field mt-1" />
+              <input defaultValue={session.user.email} disabled className="field mt-1 opacity-60" />
             </div>
-            <div>
-              <label className="text-xs text-charcoal/60">Phone</label>
-              <input defaultValue="98765 43210" className="field mt-1" />
-            </div>
-            <button className="btn-secondary">Save changes</button>
+            <p className="text-xs text-charcoal/50">
+              Signed in as this account across both the website and the KALVAN app.
+            </p>
           </div>
         )}
 
         {activeTab === "Orders" && (
           <div className="space-y-4">
-            {mockOrders.map((order) => (
-              <div key={order.id} className="flex flex-col justify-between gap-2 border border-charcoal/10 p-4 sm:flex-row sm:items-center">
-                <div>
-                  <p className="text-sm font-medium">#{order.id}</p>
-                  <p className="text-xs text-charcoal/50">Placed on {order.date}</p>
+            {ordersLoading ? (
+              <p className="text-sm text-charcoal/50">Loading orders…</p>
+            ) : orders.length === 0 ? (
+              <p className="text-sm text-charcoal/50">You haven&apos;t placed any orders yet.</p>
+            ) : (
+              orders.map((order) => (
+                <div
+                  key={order.id}
+                  className="flex flex-col justify-between gap-2 border border-charcoal/10 p-4 sm:flex-row sm:items-center"
+                >
+                  <div>
+                    <p className="text-sm font-medium">#{order.order_number}</p>
+                    <p className="text-xs text-charcoal/50">
+                      Placed on {new Date(order.created_at).toLocaleDateString("en-IN")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <span className="text-xs capitalize text-charcoal/70">{order.order_status}</span>
+                    <span className="text-sm font-medium">₹{order.total.toLocaleString("en-IN")}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-6">
-                  <span
-                    className={`text-xs ${
-                      order.status === "Delivered" ? "text-olive-dark" : "text-charcoal/70"
-                    }`}
-                  >
-                    {order.status}
-                  </span>
-                  <span className="text-sm font-medium">₹{order.total.toLocaleString("en-IN")}</span>
-                  <button className="text-xs underline underline-offset-4">Track</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeTab === "Addresses" && (
-          <div className="max-w-md space-y-4">
-            <div className="border border-charcoal/10 p-4">
-              <p className="text-sm font-medium">Aditya Verma</p>
-              <p className="mt-1 text-sm text-charcoal/60">
-                221B, Sector 45, Gurugram, Haryana, 122003
-              </p>
-              <p className="mt-1 text-sm text-charcoal/60">Phone: 98765 43210</p>
-              <span className="mt-2 inline-block text-xs text-olive-dark">Default address</span>
-            </div>
-            <button className="btn-secondary">Add new address</button>
+              ))
+            )}
           </div>
         )}
 

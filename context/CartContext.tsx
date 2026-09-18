@@ -13,6 +13,7 @@ import { Product } from "@/lib/products";
 
 export type CartItem = {
   productId: string;
+  variantId: string;
   slug: string;
   name: string;
   image: string;
@@ -24,7 +25,7 @@ export type CartItem = {
 
 type CartContextValue = {
   items: CartItem[];
-  addItem: (product: Product, size: string, color: string, quantity?: number) => void;
+  addItem: (product: Product, size: string, color: string, variantId: string, quantity?: number) => void;
   removeItem: (productId: string, size: string, color: string) => void;
   updateQuantity: (productId: string, size: string, color: string, quantity: number) => void;
   clearCart: () => void;
@@ -80,7 +81,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [coupon, hydrated]);
 
   const addItem = useCallback(
-    (product: Product, size: string, color: string, quantity = 1) => {
+    (product: Product, size: string, color: string, variantId: string, quantity = 1) => {
       setItems((prev) => {
         const existing = prev.find((i) => sameLine(i, product.id, size, color));
         if (existing) {
@@ -94,6 +95,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           ...prev,
           {
             productId: product.id,
+            variantId,
             slug: product.slug,
             name: product.name,
             image: product.images[0],
