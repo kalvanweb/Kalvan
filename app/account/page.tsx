@@ -49,6 +49,14 @@ export default function AccountPage() {
       .finally(() => setOrdersLoading(false));
   }, [activeTab, session]);
 
+  async function handleGoogleSignIn() {
+    setAuthError(null);
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/account` },
+    });
+  }
+
   async function handleAuthSubmit(e: React.FormEvent) {
     e.preventDefault();
     setAuthError(null);
@@ -87,7 +95,21 @@ export default function AccountPage() {
           <h1 className="mt-2 text-center font-display text-4xl tracking-wide">
             {mode === "login" ? "Sign In" : "Create Account"}
           </h1>
-          <form className="mt-8 space-y-4" onSubmit={handleAuthSubmit}>
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            className="mt-8 flex w-full items-center justify-center border border-charcoal/25 py-3 text-sm font-medium text-charcoal hover:bg-charcoal/5"
+          >
+            Continue with Google
+          </button>
+
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-charcoal/10" />
+            <span className="text-xs uppercase text-charcoal/40">or use email</span>
+            <div className="h-px flex-1 bg-charcoal/10" />
+          </div>
+
+          <form className="space-y-4" onSubmit={handleAuthSubmit}>
             {mode === "signup" && (
               <div>
                 <label className="text-xs text-charcoal/60">Full name</label>
